@@ -36,7 +36,7 @@ An app might have a set of device capabilities (`UIRequiredDeviceCapabilities`),
 
 ##### Entitlements
 
-As stated in the [Apple Developer Documentation](https://developer.apple.com/library/archive/documentation/Miscellaneous/Reference/EntitlementKeyReference/Chapters/AboutEntitlements.html), entitlements confer specific capabilities or security permissions to iOS apps. Many entitlements can be set using the Summary tab of the Xcode target editor. Other entitlements require editing a target’s entitlements property list file or are inherited from the iOS provisioning profile used to run the app.
+As stated in the [Apple Developer Documentation](https://developer.apple.com/library/archive/documentation/Miscellaneous/Reference/EntitlementKeyReference/Chapters/AboutEntitlements.html), entitlements confer specific capabilities or security permissions to iOS apps. Many entitlements can be set using the "Summary" tab of the Xcode target editor. Other entitlements require editing a target’s entitlements property list file or are inherited from the iOS provisioning profile used to run the app.
 
 The [Apple Developer Documentation](https://developer.apple.com/library/archive/technotes/tn2415/_index.html#//apple_ref/doc/uid/DTS40016427-CH1-APPENTITLEMENTS) also explains that:
 
@@ -44,14 +44,14 @@ The [Apple Developer Documentation](https://developer.apple.com/library/archive/
 - the provisioning profile is embedded into the app bundle during the build (`embedded.mobileprovision`).
 - entitlements from Code Signing Entitlements files (`<appname>.entitlements`) are transferred to the app's signature.
 
-For example, if a developer wants to set the "Default Data Protection" capability, he would go to the Capabilities Tab in Xcode and enable "Data Protection", this is directly written by Xcode to the `<appname>.entitlements` as the `com.apple.developer.default-data-protection` entitlement with default value `NSFileProtectionComplete`. In the IPA we will find this in the `embedded.mobileprovision` as:
+For example, if a developer wants to set the "Default Data Protection" capability, he would go to the "Capabilities" tab in Xcode and enable "Data Protection", this is directly written by Xcode to the `<appname>.entitlements` as the `com.apple.developer.default-data-protection` entitlement with default value `NSFileProtectionComplete`. In the IPA we will find this in the `embedded.mobileprovision` as:
 
 ```xml
 <key>Entitlements</key>
 <dict>
-	...
-	<key>com.apple.developer.default-data-protection</key>
-	<string>NSFileProtectionComplete</string>
+    ...
+    <key>com.apple.developer.default-data-protection</key>
+    <string>NSFileProtectionComplete</string>
 </dict>
 ```
 
@@ -78,6 +78,7 @@ For example, when you have a Info.plist file, for a Solitair game which has, at 
 <key>NSCameraUsageDescription</key>
 <string>We want to access your camera</string>
 ```
+
 It should be suspicious that a regular solitaire game requests this kind of resource access as it probably does not have any need for [accessing the camera](https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CocoaKeys.html#//apple_ref/doc/uid/TP40009251-SW24) nor a [user's health-records](https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CocoaKeys.html#//apple_ref/doc/uid/TP40009251-SW76).
 
 
@@ -90,11 +91,11 @@ Certain capabilities require a [code signing entitlements file](https://develope
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>com.apple.security.application-groups</key>
-	<array>
-		<string>...</string>
-		<!-- Note: this array contains all group IDs registered for this app. -->
-	<array/>
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>...</string>
+        <!-- Note: this array contains all group IDs registered for this app. -->
+    <array/>
 </dict>
 </plist>
 ```
@@ -104,7 +105,7 @@ When using some entitlements like this one, no additional permissions provided b
 As documented at [Apple Developer Documentation](https://developer.apple.com/library/archive/documentation/Miscellaneous/Reference/EntitlementKeyReference/Chapters/EnablingAppSandbox.html#//apple_ref/doc/uid/TP40011195-CH4-SW19 "Adding an App to an App Group"), the App Groups entitlement is required to share information between different apps through IPC or a shared file container, which means that data can be shared on the device directly between the apps.
 This entitlement is also required if an app extension requires to [share information with its containing app](https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/ExtensionScenarios.html "Sharing Data with Your Containing App").
 
-Depending on the data to-be-shared it might be more appropriate to share it using another method such as through a backend were this data could be potentially verified, avoiding tampering by e.g. the user himself.
+Depending on the data to-be-shared it might be more appropriate to share it using another method such as through a back end were this data could be potentially verified, avoiding tampering by e.g. the user himself.
 
 ##### Embedded Provisioning Profile File
 
@@ -112,8 +113,8 @@ If not having the original source code project you should then analyze the IPA a
 
 This file is not a `.plist`, it is encoded using [Cryptographic Message Syntax](https://en.wikipedia.org/wiki/Cryptographic_Message_Syntax). On macOS you can [inspect an embedded provisioning profile's entitlements](https://developer.apple.com/library/archive/technotes/tn2415/_index.html#//apple_ref/doc/uid/DTS40016427-CH1-PROFILESENTITLEMENTS) using the following command:
 
-```
-security cms -D -i embedded.mobileprovision
+```bash
+$ security cms -D -i embedded.mobileprovision
 ```
 
 and then search for the Entitlements key region (`<key>Entitlements</key>`).
@@ -123,6 +124,7 @@ and then search for the Entitlements key region (`<key>Entitlements</key>`).
 After having checked the `<appname>.entitlements` file and the `Info.plist` file, it is time to verify how the requested permissions and assigned capabilities are put to use. For this, a source code review should be enough.
 
 Pay attention to:
+
 - whether the *purpose strings* in the `Info.plist` file match the programmatic implementations.
 - whether the capabilities registered are used in such a way that no confidential information is leaking.
 
@@ -300,17 +302,27 @@ error: 0x16f095bf8
 RET: 0x1
 ```
 
-If you look at the stack trace, you can see how `application:openURL:options:` called `__handleOpenURL:`, which called `moveItemAtPath:toPath:error:`. Notice that we have now this information without having the source code for tha target app. The first thing that we had to do was clear: hook `application:openURL:options:`. Regarding the rest, we had to think a little bit and come up with methods that we coudl start tracing and are related to the file manager, for example, all methods containing the strings "copy", "move", "remove", etc. until we have found that the one being called was `moveItemAtPath:toPath:error:`.
+If you look at the stack trace, you can see how `application:openURL:options:` called `__handleOpenURL:`, which called `moveItemAtPath:toPath:error:`. Notice that we have now this information without having the source code for tha target app. The first thing that we had to do was clear: hook `application:openURL:options:`. Regarding the rest, we had to think a little bit and come up with methods that we could start tracing and are related to the file manager, for example, all methods containing the strings "copy", "move", "remove", etc. until we have found that the one being called was `moveItemAtPath:toPath:error:`.
 
 A final thing worth noticing here is that this way of handling incoming files is the same for custom URL schemes. Please refer to "Testing Custom URL Schemes" for more information.
 
 ##### Testing App Extensions
 
+For the dynamic analysis we can do the following to gain knowledge without having the source code:
+
+- inspect the Items being shared
+- identify the involved app extensions
+
 Following the previous example of Telegram we will now use the "Share" button on a text file to create a note in the Notes app with it:
 
 ![Using an App Extension](Images/Chapters/0x06h/telegram_share_extension.png)
 
-This produces the following output:
+
+###### Inspect the Items being shared
+
+For this we should hook `NSExtensionContext - inputItems`:
+
+When we trigger the share and select the Notes app as target, we see the following output:
 
 ```
 (0x1c06bb420) NSExtensionContext - inputItems
@@ -333,10 +345,14 @@ RET: (
 
 Here we can observe that:
 
-- internally it is implemented via a `NSXPCConnection` that uses the libxpc.dylib Framework.
+- as we anticipated in the overview, this occurred via XPC under-the-hood, concretely it is implemented via a `NSXPCConnection` that uses the `libxpc.dylib` Framework.
 - the UTIs included in the `NSItemProvider` are `public.plain-text` and `public.file-url`, the latter being included in `NSExtensionActivationRule` from the [`Info.plist` of the "Share Extension" of Telegram](https://github.com/peter-iakovlev/Telegram-iOS/blob/master/Share/Info.plist).
 
-You can also find out which Extension is taking care of your request with `NSExtension - _plugIn`:
+###### Identify the App Extensions Involved
+
+You can also find out which app extension is taking care of your the requests and responses by hooking `NSExtension - _plugIn`:
+
+We run the same example again:
 
 ```
 (0x1c0370200) NSExtension - _plugIn
@@ -346,27 +362,19 @@ RET: <PKPlugin: 0x1163637f0 ph.telegra.Telegraph.Share(5.3) 5B6DE177-F09B-47DA-9
 RET: <PKPlugin: 0x10bff7910 com.apple.mobilenotes.SharingExtension(1.5) 73E4F137-5184-4459-A70A-83F90A1414DC 1(2) /private/var/containers/Bundle/Application/5E267B56-F104-41D0-835B-F1DAB9AE076D/MobileNotes.app/PlugIns/com.apple.mobilenotes.SharingExtension.appex>
 ```
 
-As you can see there are two app extensions involved: `Share.appex` and `com.apple.mobilenotes.SharingExtension.appex`.
+As you can see there are two app extensions involved:
 
-```
-ph.telegra.Telegraph on (iPhone: 11.1.2) [usb] # cd PlugIns
-/var/containers/Bundle/Application/15E6A58F-1CA7-44A4-A9E0-6CA85B65FA35/Telegram X.app/PlugIns
-ph.telegra.Telegraph on (iPhone: 11.1.2) [usb] # ls
-NSFileType      Perms  NSFileProtection    Read    Write    Owner           Group           Size     Creation                   Name
-------------  -------  ------------------  ------  -------  --------------  --------------  -------  -------------------------  -------------------------
-Directory         493  None                True    False    _installd (33)  _installd (33)  224.0 B  2019-01-31 00:26:06 +0000  NotificationContent.appex
-Directory         493  None                True    False    _installd (33)  _installd (33)  512.0 B  2019-01-31 00:26:32 +0000  Widget.appex
-Directory         493  None                True    False    _installd (33)  _installd (33)  224.0 B  2019-01-31 00:26:21 +0000  Share.appex
-Directory         493  None                True    False    _installd (33)  _installd (33)  192.0 B  2019-01-31 00:26:17 +0000  SiriIntents.appex
-```
+- `Share.appex` is sending the text file (`public.plain-text` and `public.file-url`)
+- `com.apple.mobilenotes.SharingExtension.appex` which is receiving and will process the text file
 
-If you want to dig in more into what's happening under-the-hood in terms of XPC we recommend to take a look at the internal calls from "libxpc.dylib".
+If you want to dig in more into what's happening under-the-hood in terms of XPC, we recommend to take a look at the internal calls from "libxpc.dylib". For example you can use frida-trace and then dig deeper into the methods that you find more interesting by extending the automatically generated hooks.
+
 
 ### Testing Custom URL Schemes
 
 #### Overview
 
-Custom URL schemes allow apps to communicate via a custom protocol. An app must declare support for the scheme and handle incoming URLs that use the scheme.
+Custom URL schemes [allow apps to communicate via a custom protocol](https://developer.apple.com/library/content/documentation/iPhone/Conceptual/iPhoneOSProgrammingGuide/Inter-AppCommunication/Inter-AppCommunication.html#//apple_ref/doc/uid/TP40007072-CH6-SW1 "Using URL Schemes to Communicate with Apps"). An app must declare support for the scheme and handle incoming URLs that use the scheme.
 
 ##### Registering Custom URL Schemes
 
@@ -458,7 +466,7 @@ $ strings <yourapp> | grep "myURLscheme://"
 or even better, use radare2's `iz/izz` command or rafind2, both will find strings where the unix `strings` command won't. Example from iGoat-Swift:
 
 ```bash
-r2 -qc izz~iGoat:// iGoat-Swift
+$ r2 -qc izz~iGoat:// iGoat-Swift
 37436 0x001ee610 0x001ee610  23  24 (4.__TEXT.__cstring) ascii iGoat://?contactNumber=
 ```
 
@@ -478,7 +486,6 @@ Messages — sms://phonenumber
 Notes — mobilenotes://
 ...
 ```
-
 
 ##### Testing for Deprecated Methods
 
@@ -798,11 +805,11 @@ For this you can use [IDB](https://www.idbtool.com/):
 - Go to the "URL Handlers" section. In "URL schemes", click "Refresh", and on the left you'll find a list of all custom schemes defined in the app being tested. You can load these schemes by clicking "Open", on the right side. By simply opening a blank URI scheme (e.g., opening `myURLscheme://`), you can discover hidden functionality (e.g., a debug window) and bypass local authentication.
 - To find out whether custom URI schemes contain any bugs, try to fuzz them. In the "URL Handlers" section, go to the "Fuzzer" tab. On the left side default IDB payloads are listed. The [FuzzDB](https://github.com/fuzzdb-project/fuzzdb) project offers fuzzing dictionaries. Once your payload list is ready, go to the "Fuzz Template" section in the left bottom panel and define a template. Use `$@$` to define an injection point, for example:
 
-```sh
+```
 myURLscheme://$@$
 ```
 
-While the URL scheme is being fuzzed, watch the logs (in Xcode, go to "Window -> Devices ->" *click on your device* "->" *bottom console contains logs*) to observe the impact of each payload. The history of used payloads is on the right side of the IDB "Fuzzer" tab.
+While the URL scheme is being fuzzed, watch the logs (in Xcode, go to Window -> Devices -> *click on your device* -> *bottom console contains logs*) to observe the impact of each payload. The history of used payloads is on the right side of the IDB "Fuzzer" tab.
 
 
 ##### Using Needle
@@ -906,7 +913,7 @@ Check the `baseURL` for dynamic parameters that can be manipulated (leading to l
 
 ##### Testing for HTTPS-Only Content
 
-In `WKWebViews` it is possible to detect mixed content or content that was completely loaded via HTTP. By using the method `hasOnlySecureContent` it can be ensured that only content via HTTPS is shown, otherwise an alert is displayed to the user, see page 159 and 160 in [#THIEL] for an example.  
+In `WKWebView`s it is possible to detect mixed content or content that was completely loaded via HTTP. By using the method `hasOnlySecureContent` it can be ensured that only content via HTTPS is shown, otherwise an alert is displayed to the user, see page 159 and 160 in [#THIEL] for an example.  
 
 #### Dynamic Analysis
 
@@ -921,9 +928,9 @@ In a real-world scenario, JavaScript can only be injected through a permanent ba
 
 Several default schemes are available that are being interpreted in a WebView on iOS, for example:
 
--	http(s)://
--	file://
--	tel://
+- http(s)://
+- file://
+- tel://
 
 WebViews can load remote content from an endpoint, but they can also load local content from the app data directory. If the local content is loaded, the user shouldn't be able to influence the filename or the path used to load the file, and users shouldn't be able to edit the loaded file.
 
@@ -945,6 +952,7 @@ The following WebView settings control resource access:
 However, it is possible to set the [undocumented](https://github.com/WebKit/webkit/blob/master/Source/WebKit/UIProcess/API/Cocoa/WKPreferences.mm#L470) `allowFileAccessFromFileURLs` property in a WebView. Here is an example:
 
 Objective-C:
+
 ```objc
 
 [webView.configuration.preferences setValue:@YES forKey:@"allowFileAccessFromFileURLs"];
@@ -952,6 +960,7 @@ Objective-C:
 ```
 
 Swift:
+
 ```swift
 
 webView.configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
@@ -965,6 +974,7 @@ Please also verify which WebView class is used. Remember that `WKWebView` should
 If a WebView instance can be identified, find out whether local files are loaded with the [`loadFileURL(_:allowingReadAccessTo:)`](https://developer.apple.com/documentation/webkit/wkwebview/1414973-loadfileurl "loadFileURL") method.
 
 Objective-C:
+
 ```objc
 
 [self.wk_webview loadFileURL:url allowingReadAccessToURL:readAccessToURL];
@@ -972,6 +982,7 @@ Objective-C:
 ```
 
 Swift:
+
 ```swift
 
 webview.loadFileURL(url, allowingReadAccessTo: bundle.resourceURL!)
@@ -985,6 +996,7 @@ The URL specified in `loadFileURL` should be checked for dynamic parameters that
 In Safari on iOS, telephone number detection is on by default. However, you might want to turn it off if your HTML page contains numbers that can be interpreted as phone numbers, but are not phone numbers, or to prevent the DOM document from being modified when parsed by the browser. To turn off telephone number detection in Safari on iOS, use the format-detection meta tag (`<meta name = "format-detection" content = "telephone=no">`). An example of this can be found [here](https://developer.apple.com/library/archive/featuredarticles/iPhoneURLScheme_Reference/PhoneLinks/PhoneLinks.html#//apple_ref/doc/uid/TP40007899-CH6-SW2). Phone links should be then used (e.g. `<a href="tel:1-408-555-5555">1-408-555-5555</a>`) to explicitly create a link.
 
 Use the following best practices as defensive-in-depth measures:
+
 - create a whitelist that defines local and remote web pages and URL schemes that are allowed to be loaded.
 - create checksums of the local HTML/JavaScript files and check them while the app is starting up. [Minify JavaScript files](https://en.wikipedia.org/wiki/Minification_(programming)) to make them harder to read.
 
@@ -1035,14 +1047,14 @@ First we see how the JavaScript bridge is enabled:
 
 ```swift
 func enableJavaScriptBridge(_ enabled: Bool) {
-		options_dict["javaScriptBridge"]?.value = enabled
-		let userContentController = wkWebViewConfiguration.userContentController
-		userContentController.removeScriptMessageHandler(forName: "javaScriptBridge")
+        options_dict["javaScriptBridge"]?.value = enabled
+        let userContentController = wkWebViewConfiguration.userContentController
+        userContentController.removeScriptMessageHandler(forName: "javaScriptBridge")
 
-		if enabled {
-				let javaScriptBridgeMessageHandler = JavaScriptBridgeMessageHandler()
-				userContentController.add(javaScriptBridgeMessageHandler, name: "javaScriptBridge")
-		}
+        if enabled {
+                let javaScriptBridgeMessageHandler = JavaScriptBridgeMessageHandler()
+                userContentController.add(javaScriptBridgeMessageHandler, name: "javaScriptBridge")
+        }
 }
 ```
 
@@ -1050,9 +1062,9 @@ Adding a script message handler with name `"name"` (or `"javaScriptBridge"` in t
 
 ```javascript
 function invokeNativeOperation() {
-		value1 = document.getElementById("value1").value
-		value2 = document.getElementById("value2").value
-		window.webkit.messageHandlers.javaScriptBridge.postMessage(["multiplyNumbers", value1, value2]);
+        value1 = document.getElementById("value1").value
+        value2 = document.getElementById("value2").value
+        window.webkit.messageHandlers.javaScriptBridge.postMessage(["multiplyNumbers", value1, value2]);
 }
 ```
 
@@ -1065,9 +1077,9 @@ class JavaScriptBridgeMessageHandler: NSObject, WKScriptMessageHandler {
 
 case "multiplyNumbers":
 
-		let arg1 = Double(messageArray[1])!
-		let arg2 = Double(messageArray[2])!
-		result = String(arg1 * arg2)
+        let arg1 = Double(messageArray[1])!
+        let arg2 = Double(messageArray[2])!
+        result = String(arg1 * arg2)
 ...
 
 let javaScriptCallBack = "javascriptBridgeCallBack('\(functionFromJS)','\(result)')"
@@ -1076,9 +1088,9 @@ message.webView?.evaluateJavaScript(javaScriptCallBack, completionHandler: nil)
 
 The problem here is that the `JavaScriptBridgeMessageHandler` not only contains that function, it exposes a sensitive function:
 
-```
+```swift
 case "getSecret":
-		result = "XSRSOGKC342"
+        result = "XSRSOGKC342"
 ```
 
 #### Dynamic Analysis
@@ -1089,7 +1101,7 @@ Usage of the `JSContext` / `JSExport` for `UIWebView` and `WKScriptMessageHandle
 
 In the previous example, it was trivial to get the secret value by performing reverse engineering but imagine that the exposed function retrieves the secret from secure storage. As some content is loaded insecurely from the Internet over HTTP we could apply the previous technique and get the secret by injecting the following payload:
 
-```
+```javascript
 var res = window.webkit.messageHandlers.javaScriptBridge.postMessage(["getSecret"]);
 document.getElementById("result").innerHTML=res;
 ```
@@ -1104,34 +1116,35 @@ See another example for a vulnerable iOS app and function that is exposed to a W
 There are several ways to persist an object on iOS:
 
 ##### Object Encoding
+
 iOS comes with two protocols for object encoding and decoding for Objective-C or `NSObject`s: `NSCoding` and `NSSecureCoding`. When a class conforms to either of the protocols, the data is serialized to `NSData`: a wrapper for byte buffers. Note that `Data` in Swift is the same as `NSData` or its mutable counterpart: `NSMutableData`. The `NSCoding` protocol declares the two methods that must be implemented in order to encode/decode its instance-variables. A class using `NSCoding` needs to implement `NSObject` or be annotated as an @objc class. The `NSCoding` protocol requires to implement encode and init as shown below.
 
 ```swift
 class CustomPoint: NSObject, NSCoding {
 
-	//required by NSCoding:
-	func encode(with aCoder: NSCoder) {
-		aCoder.encode(x, forKey: "x")
-		aCoder.encode(name, forKey: "name")
-	}
+    //required by NSCoding:
+    func encode(with aCoder: NSCoder) {
+        aCoder.encode(x, forKey: "x")
+        aCoder.encode(name, forKey: "name")
+    }
 
-	var x: Double = 0.0
-	var name: String = ""
+    var x: Double = 0.0
+    var name: String = ""
 
-	init(x: Double, name: String) {
-			self.x = x
-			self.name = name
-	}
+    init(x: Double, name: String) {
+            self.x = x
+            self.name = name
+    }
 
-	// required by NSCoding: initialize members using a decoder.
-	required convenience init?(coder aDecoder: NSCoder) {
-			guard let name = aDecoder.decodeObject(forKey: "name") as? String
-					else {return nil}
-			self.init(x:aDecoder.decodeDouble(forKey:"x"),
-								name:name)
-	}
+    // required by NSCoding: initialize members using a decoder.
+    required convenience init?(coder aDecoder: NSCoder) {
+            guard let name = aDecoder.decodeObject(forKey: "name") as? String
+                    else {return nil}
+            self.init(x:aDecoder.decodeDouble(forKey:"x"),
+                                name:name)
+    }
 
-	//getters/setters/etc.
+    //getters/setters/etc.
 }
 ```
 
@@ -1161,10 +1174,10 @@ Note, when `NSData` (Objective-C) or the keyword `let` (Swift) is used: then the
 
 ```swift
 
-//archiving:
+// archiving:
 NSKeyedArchiver.archiveRootObject(customPoint, toFile: "/path/to/archive")
 
-//unarchiving:
+// unarchiving:
 guard let customPoint = NSKeyedUnarchiver.unarchiveObjectWithFile("/path/to/archive") as? CustomPoint else { return nil }
 
 ```
@@ -1237,17 +1250,18 @@ You can persist objects to *property lists* (also called plists in previous sect
 
 ```swift
 
-//archiving:
+// archiving:
 let data = NSKeyedArchiver.archivedDataWithRootObject(customPoint)
 NSUserDefaults.standardUserDefaults().setObject(data, forKey: "customPoint")
 
-//unarchiving:
+// unarchiving:
 
 if let data = NSUserDefaults.standardUserDefaults().objectForKey("customPoint") as? NSData {
     let customPoint = NSKeyedUnarchiver.unarchiveObjectWithData(data)
 }
 
 ```
+
 In this first example, the `NSUserDefaults` are used, which is the primary *property list*. We can do the same with the `Codable` version:
 
 ```swift
@@ -1269,11 +1283,13 @@ if let data = UserDefaults.standard.value(forKey:"points") as? Data {
 }
 
 ```
+
 Note that **`plist` files are not meant to store secret information**. They are designed to hold user preferences for an app.
 
 ##### XML
 
 There are multiple ways to do XML encoding. Similar to JSON parsing, there are various third party libraries, such as:
+
 - [Fuzi](https://github.com/cezheng/Fuzi "Fuzi")
 - [Ono](https://github.com/mattt/Ono "Ono")
 - [AEXML](https://github.com/tadija/AEXML "AEXML")
@@ -1315,7 +1331,6 @@ There are several ways to perform dynamic analysis:
 - For the serialization itself: use a debug build or use Frida / Objection to see how the serialization methods are handled (e.g., whether the application crashes or extra information can be extracted by enriching the objects).
 
 
-
 ### References
 
 - [#THIEL] Thiel, David. iOS Application Security: The Definitive Guide for Hackers and Developers (Kindle Locations 3394-3399). No Starch Press. Kindle Edition.
@@ -1336,13 +1351,11 @@ There are several ways to perform dynamic analysis:
 - V6.7: "If native methods of the app are exposed to a WebView, verify that the WebView only renders JavaScript contained within the app package."
 - V6.8: "Object serialization, if any, is implemented using safe serialization APIs."
 
-
 #### CWE
 
 - CWE-79 - Improper Neutralization of Input During Web Page Generation https://cwe.mitre.org/data/definitions/79.html
 - CWE-200 - Information Leak / Disclosure
 - CWE-939 - Improper Authorization in Handler for Custom URL Scheme
-
 
 #### Tools
 
