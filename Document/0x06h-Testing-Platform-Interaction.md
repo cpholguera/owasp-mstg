@@ -44,7 +44,7 @@ The [Apple Developer Documentation](https://developer.apple.com/library/archive/
 - the provisioning profile is embedded into the app bundle during the build (`embedded.mobileprovision`).
 - entitlements from Code Signing Entitlements files (`<appname>.entitlements`) are transferred to the app's signature.
 
-For example, if a developer wants to set the "Default Data Protection" capability, he would go to the "Capabilities" tab in Xcode and enable "Data Protection", this is directly written by Xcode to the `<appname>.entitlements` as the `com.apple.developer.default-data-protection` entitlement with default value `NSFileProtectionComplete`. In the IPA we will find this in the `embedded.mobileprovision` as:
+For example, if a developer wants to set the "Default Data Protection" capability, he would go to the "Capabilities" tab in Xcode and enable "Data Protection", this is directly written by Xcode to the `<appname>.entitlements` as the `com.apple.developer.default-data-protection` entitlement with default value `NSFileProtectionComplete`. In the IPA we might find this in the `embedded.mobileprovision` as:
 
 ```xml
 <key>Entitlements</key>
@@ -122,7 +122,59 @@ $ security cms -D -i embedded.mobileprovision
 
 and then search for the Entitlements key region (`<key>Entitlements</key>`).
 
-##### Source code inspection
+However, in some cases you won't find this file in the IPA so you'll have to take the binary of the app (encrypted or decrypted) and extract the entitlements file yourself.
+
+First you need to find the path to the app's bundle:
+
+```bash
+$ objection --gadget Telegram run env | grep BundlePath
+BundlePath  /var/containers/Bundle/Application/15E6A58F-1CA7-44A4-A9E0-6CA85B65FA35/Telegram X.app
+```
+
+###### Per SSH and grep
+
+Connect per SSH, `cd` to the bundle and grep for "applinks:":
+
+```bash
+# grep -nria "applinks:" .
+Telegram X:4139:            <string>applinks:telegram.me</string>
+Telegram X:4140:            <string>applinks:t.me</string>
+```
+
+this is located in the app binary itself (called "Telegram X" in this case). Note that this information is not encrypted in the app binary, that's why we could grep and find it. If not we would have to decrypt and extract the app first.
+
+
+###### Using binwalk
+
+Extract all XML files using binwalk on the decrypted/encrypted binary:
+
+```language
+$ binwalk -e -y=xml ./Telegram\ X
+
+DECIMAL       HEXADECIMAL     DESCRIPTION
+--------------------------------------------------------------------------------
+1430180       0x15D2A4        XML document, version: "1.0"
+1458814       0x16427E        XML document, version: "1.0"
+```
+
+###### Using radare
+
+Search all strings on the decrypted/encrypted binary containing "PropertyList":
+
+```bash
+$ r2 -qc 'izz~PropertyList' ./Telegram\ X
+
+24162 0x0015d2a4 0x0015d2a4 1526 1527 () ascii <?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">
+...<key>com.apple.security.application-groups</key>\n\t\t<array>\n\t\t\t<string>group.ph.telegra.Telegraph</string>...
+
+24696 0x0016427d 0x0016427d 331 332 () ascii H<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>cdhashes</key>...
+```
+
+It has also found the two `plist` files and we are able to find the `application-groups` entitlement form the previous section.
+
+> Note: don't rely on the `strings` command for this kind of things as it won't be able to find this information. Better use grep with the `-a` flag directly on the binary or use radare2 (`izz`)/rabin2 (`-zz`).
+
+##### Source Code Inspection
 
 After having checked the `<appname>.entitlements` file and the `Info.plist` file, it is time to verify how the requested permissions and assigned capabilities are put to use. For this, a source code review should be enough.
 
@@ -527,7 +579,7 @@ As an example, Telegram declares in its [`Info.plist`](https://github.com/peter-
 In order to determine how a URL path is built and validated, if you have the original source code, you can search for the following methods:
 
 - `application:didFinishLaunchingWithOptions:` method or `application:will-FinishLaunchingWithOptions:`: verify how the decision is made and how the information about the URL is retrieved
-- [`application:openURL:options:`](application:openURL:options:): verify how the resource is being opened, i.e. how the data is being parsed, verify the [options](https://developer.apple.com/documentation/uikit/uiapplication/openurloptionskey), especially if the calling app ([`sourceApplication`](https://developer.apple.com/documentation/uikit/uiapplication/openurloptionskey/1623128-sourceapplication)) is being verified or checked against a white- or blacklist. The app might also need user permission when using the custom URL scheme.
+- [`application:openURL:options:`](https://developer.apple.com/documentation/uikit/uiapplicationdelegate/1623112-application?language=objc): verify how the resource is being opened, i.e. how the data is being parsed, verify the [options](https://developer.apple.com/documentation/uikit/uiapplication/openurloptionskey), especially if the calling app ([`sourceApplication`](https://developer.apple.com/documentation/uikit/uiapplication/openurloptionskey/1623128-sourceapplication)) is being verified or checked against a white- or blacklist. The app might also need user permission when using the custom URL scheme.
 
 In Telegram you will [find four different methods being used](https://github.com/peter-iakovlev/Telegram-iOS/blob/87e0a33ac438c1d702f2a0b75bf21f26866e346f/Telegram-iOS/AppDelegate.swift#L1250):
 
@@ -643,8 +695,6 @@ $ r2 -qc izz~iGoat:// iGoat-Swift
 ```
 
 
-
-
 ##### Testing for Deprecated Methods
 
 Search for deprecated methods like:
@@ -652,6 +702,22 @@ Search for deprecated methods like:
 - [`application:handleOpenURL:`](https://developer.apple.com/documentation/uikit/uiapplicationdelegate/1622964-application?language=objc)
 - [`openURL:`](https://developer.apple.com/documentation/uikit/uiapplication/1622961-openurl?language=objc)
 - [`application:openURL:sourceApplication:annotation:`](https://developer.apple.com/documentation/uikit/uiapplicationdelegate/1623073-application)
+
+
+For example, here we find those three:
+
+```bash
+$ rabin2 -zzq Telegram\ X.app/Telegram\ X | grep -i "openurl"
+
+0x1000d9e90 31 30 UIApplicationOpenURLOptionsKey
+0x1000dee3f 50 49 application:openURL:sourceApplication:annotation:
+0x1000dee71 29 28 application:openURL:options:
+0x1000dee8e 27 26 application:handleOpenURL:
+0x1000df2c9 9 8 openURL:
+0x1000df766 12 11 canOpenURL:
+0x1000df772 35 34 openURL:options:completionHandler:
+...
+```
 
 #### Dynamic Analysis
 
@@ -667,6 +733,8 @@ Once you've identified the custom URL schemes the app has registered, there are 
 ###### Using Safari
 
 To quickly test one URL scheme you can open the URLs on Safari and observe how the app behaves. For example, if you write `tel://123456789` in the address bar of Safari, a pop up will appear with the *telephone number* and the options "Cancel" and "Call". If you press "Call" it will open the Phone app and directly make the call.
+
+You may also know already about pages that trigger custom URL schemes, you can just navigate normally to those pages and Safari will automatically ask when it finds a custom URL scheme.
 
 ###### Using Frida
 
@@ -725,9 +793,13 @@ Manual fuzzing can be performed against the URL scheme to identify input validat
 
 ##### Identifying and Hooking the URL Handler Method
 
-If you can't look into the original source code you will have to find out yourself which method is being used by the app. You cannot know if it is an Objective-C method or a Swift one, or even if the app is using a deprecated one. So let's hook all of them to find out. For this we will use the [ObjC method observer](https://codeshare.frida.re/@mrmacete/objc-method-observer/) from Frida CodeShare, which is an extremely handy script that allows you to quickly observe any collection of methods or classes just by providing a simple pattern.
+If you can't look into the original source code you will have to find out yourself which method does the app use to handle the URL scheme requests that it receives. You cannot know if it is an Objective-C method or a Swift one, or even if the app is using a deprecated one.
 
-In this case we are interested into all methods containing openURL, therefore our pattern will be `*[* *openURL*]`:
+###### Crafting the link yourself and letting Safari open it (objc-method-observer)
+
+So let's hook all of them to find out. For this we will use the [ObjC method observer](https://codeshare.frida.re/@mrmacete/objc-method-observer/) from Frida CodeShare, which is an extremely handy script that allows you to quickly observe any collection of methods or classes just by providing a simple pattern.
+
+In this case we are interested into all methods containing "openURL", therefore our pattern will be `*[* *openURL*]`:
 
 - the first asterisk will match all instance `-` and class `+` methods
 - the second matches all Objective-C classes
@@ -789,13 +861,15 @@ Now we know that:
 - It gets our URL as a parameter: `igoat://`
 - We also can verify the source application: `com.apple.mobilesafari`
 - We can also know from where it was called, as expected from `-[UIApplication _applicationOpenURLAction:payload:origin:]`
-- The method returns `0x1` which means `YES`
+- The method returns `0x1` which means `YES` ([the delegate successfully handled the request](https://developer.apple.com/documentation/uikit/uiapplicationdelegate/1623112-application?language=objc#return-value))
 
 The call was successful and we see now that the iGoat app was open:
 
 ![iGoat Opened via URL Scheme](Images/Chapters/0x06h/iGoat_opened_via_url_scheme.jpg)
 
 Notice that we can also see that the caller (source application) was Safari if we look in the upper-left corner of the screenshot.
+
+###### Dynamically opening the link from the app itfelf (Frida REPL)
 
 It is also interesting to see which other methods get called on the way. To change the result a little bit we will call the same URL Scheme from the iGoat app itself:
 
@@ -880,6 +954,127 @@ RET: 0x1
 
 The output is truncated for better readability. This time you see that `UIApplicationOpenURLOptionsSourceApplicationKey` has changed to `OWASP.iGoat-Swift`, which makes sense. In addition, we see an overview of all `openURL`-like methods being called. This can be very useful for some scenarios as it will help you to decide what you next steps will be, e.g. which method you will hook or tamper with next.
 
+###### Opening a link by navigating to a page and letting Safari open it (frida-trace)
+
+We do it now with Safari and Telegram, but instead of giving it manually into the search bar, we will let Safari identify and process the URL scheme from a page containing one. Opening this link "https://telegram.me/fridadotre" will trigger this behaviour.
+
+![Open this page in "Telegram"?](Images/Chapters/0x06h/open_in_telegram_via_urlscheme.png)
+
+First of all we let frida-trace generate the stubs for us:
+
+```bash
+$ frida-trace -U Telegram -m "*[* *restorationHandler*]" -i "*open*Url*" -m "*[* *application*URL*]" -m "*[* openURL]"
+
+...
+7310 ms  -[UIApplication _applicationOpenURLAction: 0x1c44ff900 payload: 0x10c5ee4c0 origin: 0x0]
+7311 ms     | -[AppDelegate application: 0x105a59980 openURL: 0x1c46ebb80 options: 0x1c0e222c0]
+7312 ms     | $S10TelegramUI15openExternalUrl7account7context3url05forceD016presentationData
+            18applicationContext20navigationController12dismissInputy0A4Core7AccountC_AA
+            14OpenURLContextOSSSbAA012PresentationK0CAA0a11ApplicationM0C7Display010NavigationO0CSgyyctF()
+```
+
+Now we can simply modify by hand the stubs we are interested in, that is, the Objective-C method `application:openURL:options:`:
+
+```javascript
+// __handlers__/__AppDelegate_application_openUR_3679fadc.js
+
+onEnter: function (log, args, state) {
+    log("-[AppDelegate application: " + args[2] + " openURL: " + args[3] + " options: " + args[4] + "]");
+    log("\tapplication :" + ObjC.Object(args[2]).toString());
+    log("\topenURL :" + ObjC.Object(args[3]).toString());
+    log("\toptions :" + ObjC.Object(args[4]).toString());
+},
+```
+
+And the Swift method `$S10TelegramUI15openExternalUrl...`:
+
+```javascript
+// __handlers__/TelegramUI/_S10TelegramUI15openExternalUrl7_b1a3234e.js
+
+  onEnter: function (log, args, state) {
+
+    log("TelegramUI.openExternalUrl(account, url, presentationData," +
+                "applicationContext, navigationController, dismissInput)");
+    log("\taccount: " + ObjC.Object(args[1]).toString());
+    log("\turl: " + ObjC.Object(args[2]).toString());
+    log("\tpresentationData: " + args[3]);
+    log("\tapplicationContext: " + ObjC.Object(args[4]).toString());
+    log("\tnavigationController: " + ObjC.Object(args[5]).toString());
+  },
+```
+
+The next time we run it, we see the following output:
+
+```javascript
+$ frida-trace -U Telegram -m "*[* *restorationHandler*]" -i "*open*Url*" -m "*[* *application*URL*]" -m "*[* openURL]"
+
+  8144 ms  -[UIApplication _applicationOpenURLAction: 0x1c44ff900 payload: 0x10c5ee4c0 origin: 0x0]
+  8145 ms     | -[AppDelegate application: 0x105a59980 openURL: 0x1c46ebb80 options: 0x1c0e222c0]
+  8145 ms     | 	application: <Application: 0x105a59980>
+  8145 ms     | 	openURL: tg://resolve?domain=fridadotre
+  8145 ms     | 	options :{
+                        UIApplicationOpenURLOptionsOpenInPlaceKey = 0;
+                        UIApplicationOpenURLOptionsSourceApplicationKey = "com.apple.mobilesafari";
+                    }
+  8269 ms     |    | TelegramUI.openExternalUrl(account, url, presentationData, 
+                                        applicationContext, navigationController, dismissInput)
+  8269 ms     |    | 	account: nil
+  8269 ms     |    | 	url: tg://resolve?domain=fridadotre
+  8269 ms     |    | 	presentationData: 0x1c4c51741
+  8269 ms     |    | 	applicationContext: nil
+  8269 ms     |    | 	navigationController: TelegramUI.PresentationData
+  8274 ms     | -[UIApplication applicationOpenURL:0x1c46ebb80]
+```
+
+There you can observe the following:
+
+- it calls `application:openURL:options:` from the app delegate as expected
+- the source application is Safari ("com.apple.mobilesafari")
+- `application:openURL:options:` handles the URL but does not open it, it calls `TelegramUI.openExternalUrl` for that
+- the URL being opened is `tg://resolve?domain=fridadotre`
+- it uses the `tg://` custom URL scheme from Telegram
+
+
+It is interesting to see that if you open the same link "https://telegram.me/fridadotre", click on cancel and the click on the link offered by the page itself "Open in the Telegram app, instead of opening via custom URL scheme it will open via Universal Links.
+
+![Open in the Telegram app](Images/Chapters/0x06h/open_in_telegram_via_universallink.png)
+
+You can try this and trace both methods like this:
+
+```javascript
+$ frida-trace -U Telegram -m "*[* *restorationHandler*]" -m "*[* *application*openURL*options*]"
+
+// After clicking "Open" on the pop-up
+           
+ 16374 ms  -[AppDelegate application :0x10556b3c0 openURL :0x1c4ae0080 options :0x1c7a28400]
+ 16374 ms  	application :<Application: 0x10556b3c0>
+ 16374 ms  	openURL :tg://resolve?domain=fridadotre
+ 16374 ms  	options :{
+    UIApplicationOpenURLOptionsOpenInPlaceKey = 0;
+    UIApplicationOpenURLOptionsSourceApplicationKey = "com.apple.mobilesafari";
+}
+
+// After clicking "Cancel" on the pop-up and "OPEN" in the page
+
+406575 ms  -[AppDelegate application:0x10556b3c0 continueUserActivity:0x1c063d0c0 restorationHandler:0x16f27a898]
+406575 ms  	application:<Application: 0x10556b3c0>
+406575 ms  	continueUserActivity:<NSUserActivity: 0x1c063d0c0>
+406575 ms  		webpageURL:https://telegram.me/fridadotre
+406575 ms  		activityType:NSUserActivityTypeBrowsingWeb
+406575 ms  		userInfo:{
+}
+406575 ms  	restorationHandler:<__NSStackBlock__: 0x16f27a898>
+```
+
+###### Testing for Deprecated Methods
+
+Search for deprecated methods like:
+
+- [`application:handleOpenURL:`](https://developer.apple.com/documentation/uikit/uiapplicationdelegate/1622964-application?language=objc)
+- [`openURL:`](https://developer.apple.com/documentation/uikit/uiapplication/1622961-openurl?language=objc)
+- [`application:openURL:sourceApplication:annotation:`](https://developer.apple.com/documentation/uikit/uiapplicationdelegate/1623073-application)
+
+Simply use frida-trace to see if any of those methods is being used.
 
 ##### Testing URL Schemes Source Validation
 
@@ -917,7 +1112,7 @@ true
 nil
 ```
 
-Nothing happens. This tells us already that this method is not being used for that as we cannot find any *app-package-looking* string like `OWASP.iGoat-Swift` or `com.apple.mobilesafari` between the hook and the text of the tweet. However, remember that we are just probing one method, the app might be using other approach for the comparison.
+Nothing happens. This tells us already that this method is not being used for that as we cannot find any *app-package-looking* string like `OWASP.iGoat-Swift` or `com.apple.mobilesafari` between the hook and the text of the tweet. However, consider that we are just probing one method, the app might be using other approach for the comparison.
 
 
 ##### Fuzzing URL Schemes
