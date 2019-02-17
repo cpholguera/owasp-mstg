@@ -189,7 +189,9 @@ There are various steps in the analysis process:
 
 You can now keep going and try to trace and verify how the data is being validated. For example, if you have two apps that *communicate* via Universal Links you can use this to see if the sending app is leaking sensitive data by hooking these methods in the receiving app. This is especially useful when you don't have the source code as you will be able to retrieve the full URL that you wouldn't see other way as it might be the result of clicking some button or triggering some functionality.
 
-The data can be found in `userInfo` of the `NSUserActivity` object. In the previous case there was no data being transferred but it might be the case for other cases. To see this, be sure to hook the userInfo property or access it directly form the `continueUserActivity` object in your hook (e.g. by adding a line like this `log("userInfo:" + ObjC.Object(args[3]).userInfo().toString());`).
+In some cases, you might find data in `userInfo` of the `NSUserActivity` object. In the previous case there was no data being transferred but it might be the case for other cases. To see this, be sure to hook the `userInfo` property or access it directly form the `continueUserActivity` object in your hook (e.g. by adding a line like this `log("userInfo:" + ObjC.Object(args[3]).userInfo().toString());`).
+
+**Final Notes about Universal Links and Handoff**
 
 A final note here, this is also [the way Handoff works](https://developer.apple.com/library/archive/documentation/UserExperience/Conceptual/Handoff/HandoffFundamentals/HandoffFundamentals.html#//apple_ref/doc/uid/TP40014338) and how you could also see the received data. Actually, this is very similar to ["Web Browser–to–Native App Handoff"](https://developer.apple.com/library/archive/documentation/UserExperience/Conceptual/Handoff/AdoptingHandoff/AdoptingHandoff.html#//apple_ref/doc/uid/TP40014338-CH2-SW10) scenario.
 
