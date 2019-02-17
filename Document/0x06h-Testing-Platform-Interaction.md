@@ -61,7 +61,7 @@ The following sections go more into detail about the mentioned files and how to 
 
 #### Static Analysis
 
-Since iOS 10, there are four areas which you need to inspect for permissions:
+Since iOS 10, these are the main areas which you need to inspect for permissions:
 
 Since iOS 10, there are three areas which you need to inspect for permissions:
 - the Info.plist file,
@@ -122,31 +122,30 @@ $ security cms -D -i embedded.mobileprovision
 
 and then search for the Entitlements key region (`<key>Entitlements</key>`).
 
-However, in some cases you won't find this file in the IPA so you'll have to take the binary of the app (encrypted or decrypted) and extract the entitlements file yourself.
+##### Entitlements Embedded in the Compiled App Binary
 
-First you need to find the path to the app's bundle:
+If you only have the compiled app (IPA) or even only the running app, you normally won't be able to find `.entitlements` files. This could be also the case for the `embedded.mobileprovision` file. Still, you'll be able to extract the entitlements files from the app bundle yourself.
+
+First you need to find the path to the app's bundle. This can be easily done with objection, example using Telegram:
+
+- open the app and leave it running on foreground
+- run the following command
 
 ```bash
 $ objection --gadget Telegram run env | grep BundlePath
 BundlePath  /var/containers/Bundle/Application/15E6A58F-1CA7-44A4-A9E0-6CA85B65FA35/Telegram X.app
 ```
 
-###### Per SSH and grep
+Now you have two options:
 
-Connect per SSH, `cd` to the bundle and grep for "applinks:":
+- connect per SSH, `cd` to the bundle and locate the (encrypted) app binary and use grep directly on it
+- or decrypt and extract the binary to your computer and use other tools apart from grep like binwalk or radare2.
 
-```bash
-# grep -nria "applinks:" .
-Telegram X:4139:            <string>applinks:telegram.me</string>
-Telegram X:4140:            <string>applinks:t.me</string>
-```
+> Note: don't rely on the `strings` command for this kind of things as it won't be able to find this information. Better use grep with the `-a` flag directly on the binary or use radare2 (`izz`)/rabin2 (`-zz`).
 
-this is located in the app binary itself (called "Telegram X" in this case). Note that this information is not encrypted in the app binary, that's why we could grep and find it. If not we would have to decrypt and extract the app first.
+Now let's assume that you have the binary on your computer. For Telegram it's called "Telegram X".
 
-
-###### Using binwalk
-
-Extract all XML files using binwalk on the decrypted/encrypted binary:
+One approach is to use binwalk to extract (`-e`) all XML files (`-y=xml`):
 
 ```language
 $ binwalk -e -y=xml ./Telegram\ X
@@ -157,9 +156,7 @@ DECIMAL       HEXADECIMAL     DESCRIPTION
 1458814       0x16427E        XML document, version: "1.0"
 ```
 
-###### Using radare
-
-Search all strings on the decrypted/encrypted binary containing "PropertyList":
+Or you can use radare2 (`-qc to *quietly* run one command and exit`) to search all strings on the app binary (`izz`) containing "PropertyList" (`~PropertyList`):
 
 ```bash
 $ r2 -qc 'izz~PropertyList' ./Telegram\ X
@@ -170,9 +167,8 @@ $ r2 -qc 'izz~PropertyList' ./Telegram\ X
 24696 0x0016427d 0x0016427d 331 332 () ascii H<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n\t<key>cdhashes</key>...
 ```
 
-It has also found the two `plist` files and we are able to find the `application-groups` entitlement form the previous section.
+In both cases (binwalk or radare2) we were able to extract the same two `plist` files. If we inspect the first one (0x0015d2a4) we see that we were able to completely recover the [original entitlements file from Telegram](https://github.com/peter-iakovlev/Telegram-iOS/blob/77ee5c4dabdd6eb5f1e2ff76219edf7e18b45c00/Telegram-iOS/Telegram-iOS-AppStoreLLC.entitlements).
 
-> Note: don't rely on the `strings` command for this kind of things as it won't be able to find this information. Better use grep with the `-a` flag directly on the binary or use radare2 (`izz`)/rabin2 (`-zz`).
 
 ##### Source Code Inspection
 
